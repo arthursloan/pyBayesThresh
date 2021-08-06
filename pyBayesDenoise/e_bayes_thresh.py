@@ -41,13 +41,6 @@ def thresh_from_weight(weight,max_iter):
     
     return thr, delta
 
-def cauchy_thresh_zero(z,w):
-    z_norm = norm.cdf(z,0,1)
-    d_norm = norm.pdf(z,0,1)
-    d1 = np.sqrt(2*np.pi)*d_norm
-    y = z_norm - z*d_norm-1/2-(z**2*d1*(1/w-1))/2
-    
-    return y
 
 def post_med_cauchy(data,weight,max_iter):
     data = data.astype('float')
@@ -77,7 +70,62 @@ def post_med_cauchy(data,weight,max_iter):
     mu_hat[huge_mu_inds] = data[huge_mu_inds];
     
     return mu_hat, delta
+
+def post_mean(x,s=1,w=0.5,prior='cauchy',a=0.5):
+    """
+    Find the posterior mean for the appropriate prior.
+
+    Parameters
+    ----------
+    x : TYPE
+        DESCRIPTION.
+    s : TYPE, optional
+        DESCRIPTION. The default is 1.
+    w : TYPE, optional
+        DESCRIPTION. The default is 0.5.
+    prior : TYPE, optional
+        DESCRIPTION. The default is 'cauchy'.
+    a : TYPE, optional
+        DESCRIPTION. The default is 0.5.
+
+    Returns
+    -------
+    mu_hat : TYPE
+        DESCRIPTION.
+
+    """
     
+    if prior == 'laplace':
+        mu_hat = post_mean_laplace(x,s,w,a=a)
+    elif prior == 'cauchy':
+        mu_hat = post_med_cauchy(x,w)
+    
+    return mu_hat
+
+        
+def post_mean_laplace(x,s,w,a):
+    a = np.min([a,20])
+    
+    wpost = wpost_laplace(w, x, s, a)
+    
+    sx = np.sign(x)
+    x = np.abs(x)
+    xpa = x/s + s*a
+    xma = x/s - s*a
+    xpa[xpa >35] = 35
+    xma[xma<-35] = -35
+    cp1 = norm.cdf(xma,0,1)
+    cp2 = norm.cdf(-xpa,0,1)
+    ef = np.exp(np.minimum(2*a*x,100))
+    post_mean_cond = x - a * s**2 *(2*cp1/(cp1+ef+cp2)-1)
+    
+    return (sx * wpost * post_mean_cond)
+
+def wpost_laplace(w,x,s=1,a=0.5):
+    
+    return 1-(1-w)/(1+w*beta_laplace(x,s,a))
+
+
 def post_mean_cauchy(data,weight):
     exp_data = np.exp(-data**2/2)
     z = weight*(data-(2*(1-exp_data))/data)
@@ -91,14 +139,59 @@ def post_mean_cauchy(data,weight):
     return mu_hat
 
 def cauchy_med_zero(mu_hat,x,weight):
-    y = x - mu_hat
-    with np.errstate(invalid='ignore'):
-        fx = norm.pdf(y,0,1)
-        yr = norm.cdf(y,0,1)-x*fx+((x*mu_hat-1)*fx*norm.cdf(-mu_hat,0,1)/norm.pdf(mu_hat,0,1))
-    yl = 1+np.exp(-x**2/2)*(x**2*(1/weight-1)-1)
-    z = yl/2-yr
-    return z
+    """
+    The objective function that has to be zeroed, component by component,
+    to find the posterior median when the quasi-Cauchy prior is used.  
+    
+    x and z may be scalars.
 
+    Parameters
+    ----------
+    mu_hat : ndarray
+        parameter vector.
+    x : ndarray
+        data vector.
+    weight : ndarray
+        weight.
+
+    Returns
+    -------
+    TYPE
+        DESCRIPTION.
+
+    """
+    y = x - mu_hat
+    fx = norm.pdf(y,0,1)
+    
+    yleft = norm.cdf(y,0,1)-x*fx+((x*mu_hat-1)*fx*norm.cdf(-mu_hat,0,1)/norm.pdf(mu_hat,0,1))
+    yright = 1+np.exp(-x**2/2)*(x**2*(1/weight-1)-1)
+    
+    return yright/2 - yleft
+
+def cauchy_thresh_zero(z,w):
+    """
+    The objective function that has to be zeroed to find the Cauchy threshold. 
+
+    Parameters
+    ----------
+    z : ndarray
+        putative threshold vector.
+    w : ndarray
+        weigh.
+
+    Returns
+    -------
+    y : ndarray
+        objective function value
+
+    """
+    z_norm = norm.cdf(z,0,1)
+    d_norm = norm.pdf(z,0,1)
+    y = z_norm - z*d_norm-1/2-(z**2*np.exp(-z**2/2)*(1/w-1))/2 # From R version of the code
+    # d1 = np.sqrt(2*np.pi)*d_norm # From the MATLAB version of the code 
+    # y = z_norm - z*d_norm-1/2-(z**2*d1*(1/w-1))/2
+    
+    return y
 
 def interval_solve(zf,fun,lo,hi,max_iter,mag_data=[],weight=[]):
     lo = np.asarray(lo*np.ones_like(zf))
