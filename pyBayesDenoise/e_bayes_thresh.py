@@ -210,6 +210,10 @@ def beta_cauchy(x):
     Given a value or vector x of values, find the value(s) of the function 
     β(x) = g(x)/φ(x) −1, where g is the convolution of the quasi-Cauchy with 
     the normal density φ(x).
+    
+    g(x) = \dfrac{1}{\sqrt{2\pi}} x^{-2}(1-e^{-x^2/2})
+    
+    
 
     Parameters
     ----------
@@ -222,16 +226,95 @@ def beta_cauchy(x):
         A vector the same length as x, containing the value(s) β(x)
 
     '''
-    phi = norm.pdf(x)
-    beta = -0.5*np.ones_like(x)
-    with np.errstate(divide='ignore'):
-        beta[x!=0] = (norm.pdf(0)/phi[x!=0]-1)/x[x!=0]**2-1
+    phix = norm.pdf(x)
+    j = x != 0
+    beta = x
+    
+    beta[~j] = -1/2
+    
+    beta[j] = (norm.pdf(0)/phix[j] - 1)/x[j]**2-1
+    
+    return beta
+
+def beta_laplace(x, s=1, a=0.5):
+    """
+    Given a single value or a vector of x and s, find the value(s) of the 
+    function β(x; s,a) = g(x; s,a)/fn(x; 0,s)−1, where fn(x; 0,s) is the 
+    normal density with mean 0 and standard deviation s, and g is the 
+    convolution of the Laplace density with scale parameter a, γa(μ), with the
+    normal density fn(x; μ,s) with mean mu and standard deviation s.
+    
+    The Laplace density is given by γ(u; a) = 1/2 ae**(−a|u|) and is also 
+    known as the double exponentia density.
+
+    Parameters
+    ----------
+    x : ndarray
+        the value or vector of data values.
+    s : ndarray, optional
+        The value or vector of standard deviations; if vector, must have the same length
+        as x. The default is 1.
+    a : float, optional
+        The scale parameter of the Laplace distribution. The default is 0.5.
+
+    Returns
+    -------
+    beta : ndarray
+        A vector of the same length as x is returned, containing the value(s) beta(x).
+
+    """
+    x = np.abs(x)
+    xpa = x/s +s*a
+    xma = x/s -s*a
+    rat1 = 1/xpa
+    rat1[xpa > 35] = norm.cdf(-xpa[xpa <35],0,1)/norm.pdf(xpa[xpa < 35],0,1)
+    rat2 = 1/np.abs(xma)
+    xma[xma > 35] = 35
+    rat2[xma > -35] = norm.cdf(xma[xma > -35],0,1)/norm.pdf(xma[xma > -35],0,1)
+    beta = (a * s) / 2 * (rat1 + rat2) - 1
     
     return beta
     
-def weight_from_thresh(thr):
-    fx = norm.pdf(thr,0,1)
-    Fx = norm.cdf(thr,0,1)
-    weight = np.asarray(1+(Fx - thr*fx-0.5)/(np.sqrt(np.pi/2)*fx*thr**2))
-    weight[np.isinf(weight)] = 1
+    
+def weight_from_thresh(thr,s=1,prior='cauchy',a=0.5):
+    
+    """
+    Given a value or vector of thresholds and sampling standard deviations (sd equals 1 for Cauchy
+    prior), find the mixing weight for which this is(these are) the threshold(s) of the posterior median
+    estimator. If a vector of threshold values is provided, the vector of corresponding weights is returned.
+
+    Parameters
+    ----------
+    thr : ndarray
+        Threshold value or vector of values.
+    s : ndarray
+        A single value or a vector of standard deviations if the Laplace prior is used. If
+        a vector, must have the same length as thr. Ignored if Cauchy prior is used.
+    prior : string
+        Specification of prior to be used; can be "cauchy" or "laplace".
+    a : float
+        Scale factor if Laplace prior is used. Ignored if Cauchy prior is used.
+
+    Returns
+    -------
+    ndarray
+        The numerical value or vector of values of the corresponding weight is returned.
+
+    """
+    if prior == 'laplace':
+        tma = thr/s - s*a
+        weight = 1/np.abs(tma)
+        j = tma > -35
+        
+        fx = norm.pdf(tma[j],0,1)
+        Fx = norm.cdf(tma[j],0,1)
+        
+        weight[j] = Fx/fx
+        weight = a*s*weight - beta_laplace(thr, s, a)
+        
+    elif prior == 'cauchy':
+        fx = norm.pdf(thr,0,1)
+        Fx = norm.cdf(thr,0,1)
+        weight = np.asarray(1+(Fx - thr*fx-0.5)/(np.sqrt(np.pi/2)*fx*thr**2))
+        weight[np.isinf(weight)] = 1
     return 1/weight
