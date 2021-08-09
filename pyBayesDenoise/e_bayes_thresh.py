@@ -33,13 +33,28 @@ def e_bayes_thresh(level_coeff,vscale,thresh_rule,trans_type,max_iter=50,min_std
         
     return mu_hat*std_est
 
-def thresh_from_weight(weight,max_iter):
+# def e_bayes_thresh(level_coeff,vscale,thresh_rule,trans_type,max_iter=50,min_std=1e-9):
     
-    zz = np.zeros_like(weight)
-    hi_thr = 20;
-    thr, delta = interval_solve(zz,cauchy_thresh_zero,0,hi_thr,max_iter,weight=weight)
     
-    return thr, delta
+#     norm_fac = 1/(-np.sqrt(2)*erfcinv(2*0.75))
+#     if vscale == 'level_dependent':
+#         std_est = norm_fac*np.median(np.abs(level_coeff-np.median(level_coeff)))*np.ones_like(level_coeff)
+#     else:  
+#         std_est = vscale*np.ones_like(level_coeff)
+    
+#     std_est[std_est<min_std] = min_std
+#     std_coeff = level_coeff/std_est
+    
+#     weight = weight_from_data(std_coeff,30,trans_type)
+#     if thresh_rule == 'median':   
+#         mu_hat, delta = post_med_cauchy(std_coeff,weight,max_iter)
+#     elif thresh_rule == 'mean':
+#         mu_hat = post_mean_cauchy(std_coeff,weight)
+#     elif  np.isin(thresh_rule,['soft','hard']):
+#         thr = thresh_from_weight(weight, max_iter)
+#         mu_hat = pywt.threshold(std_coeff,thr,mode=thresh_rule)
+        
+#     return mu_hat*std_est
 
 
 def post_med_cauchy(data,weight,max_iter):
@@ -73,25 +88,33 @@ def post_med_cauchy(data,weight,max_iter):
 
 def post_mean(x,s=1,w=0.5,prior='cauchy',a=0.5):
     """
-    Find the posterior mean for the appropriate prior.
+    Given a single value or a vector of data and sampling standard deviations 
+    (sd equals 1 for Cauchy prior), find the corresponding posterior mean 
+    estimate(s) of the underlying signal value(s)
 
     Parameters
     ----------
     x : TYPE
-        DESCRIPTION.
+        A data value or a vector of data.
     s : TYPE, optional
-        DESCRIPTION. The default is 1.
+        A single value or a vector of standard deviations if the Laplace prior is used. If
+        a vector, must have the same length as x. Ignored if Cauchy prior is used. The default is 1.
     w : TYPE, optional
-        DESCRIPTION. The default is 0.5.
-    prior : TYPE, optional
-        DESCRIPTION. The default is 'cauchy'.
-    a : TYPE, optional
-        DESCRIPTION. The default is 0.5.
+        The value of the prior probability that the signal is nonzero.. The default is 0.5.
+    prior : string, optional
+        Family of the nonzero part of the prior; can be "cauchy" or "laplace".. The default is 'cauchy'.
+    a : float, optional
+        The scale parameter of the nonzero part of the prior if the Laplace prior is used. The default is 0.5.
 
     Returns
     -------
-    mu_hat : TYPE
-        DESCRIPTION.
+    mu_hat : ndarray
+        If x is a scalar, the posterior mean E(θ|x) where θ is the mean of the
+        distribution from which x is drawn. If x is a vector with elements 
+        x1,...,xn and s is a vector with elements s1,...,sn 
+        (s_i is 1 for Cauchy prior), then the vector returned has elements 
+        E(θi|xi,si), where each xi has mean θiand standard deviation si, 
+        all with the given prior.
 
     """
     
@@ -122,7 +145,7 @@ def post_mean_laplace(x,s,w,a):
     return (sx * wpost * post_mean_cond)
 
 def wpost_laplace(w,x,s=1,a=0.5):
-    
+    #  Calculate the posterior weight for non-zero effect
     return 1-(1-w)/(1+w*beta_laplace(x,s,a))
 
 
@@ -193,9 +216,78 @@ def cauchy_thresh_zero(z,w):
     
     return y
 
-def interval_solve(zf,fun,lo,hi,max_iter,mag_data=[],weight=[]):
-    lo = np.asarray(lo*np.ones_like(zf))
-    hi = np.asarray(hi*np.ones_like(zf))
+def laplace_thresh_zero(x,s=1,w=0.5,a=0.5):
+    """
+    The function that has to be zeroed to find the threshold with the
+    Laplace prior.  Only allow a < 20 for input value.
+
+    Parameters
+    ----------
+    x : TYPE
+        DESCRIPTION.
+    s : TYPE, optional
+        DESCRIPTION. The default is 1.
+    w : TYPE, optional
+        DESCRIPTION. The default is 0.5.
+    a : TYPE, optional
+        DESCRIPTION. The default is 0.5.
+
+    Returns
+    -------
+    z : TYPE
+        DESCRIPTION.
+
+    """
+    a = np.min(a,20)
+    xma = x/s - s*a
+    z = norm.cdf(xma) -1/a * (1/s*norm.pdf(xma)) * (1/w + beta_laplace(x,s,a))
+    
+    return z
+
+def interval_solve(zf,fun,lo,hi,max_iter=50,**kwargs):
+    """
+    Python implementation of the function vecbinsolv from the R package
+    
+    Given a monotone function fun, and a vector of values
+    zf find a vector of numbers t such that f(t) = zf.
+    The solution is constrained to lie on the interval (lo, thi)
+
+    The function fun may be a vector of increasing functions 
+    
+    It is important that fun should work for vector arguments.
+
+    Works by successive bisection, carrying out max_iter harmonic bisections
+    of the interval between lo and hi, or until the error beteween the fuction 
+    value and the target value falls below 1e-9
+
+    Parameters
+    ----------
+    zf : ndarray
+        Target value(s) of the function, may be a scalar or vector.
+    fun : function
+        The target fuction for the solution.
+    lo : float
+        Lower limit of the function value.
+    hi : float
+        Upper limit of the function value.
+    max_iter : int, optional
+        Maximum number of allowed iterations. The default is 50.
+    mag_data : TYPE, optional
+        DESCRIPTION. The default is [].
+    weight : TYPE, optional
+        DESCRIPTION. The default is [].
+
+    Returns
+    -------
+    T : TYPE
+        DESCRIPTION.
+    delta : TYPE
+        DESCRIPTION.
+
+    """
+    
+    lo = np.asarray(lo*np.ones_like(zf),dtype=float)
+    hi = np.asarray(hi*np.ones_like(zf),dtype=float)
     
     tol = 1e-9
     
@@ -205,26 +297,19 @@ def interval_solve(zf,fun,lo,hi,max_iter,mag_data=[],weight=[]):
     
     while con_tol > tol:
         mid_point = (lo+hi)/2
-        if (np.asarray(mag_data).size != 0 ) and (np.asarray(weight).size != 0):
-            f_mid_point = fun(mid_point,mag_data,weight)
-        elif (np.asarray(weight).size != 0 ):
-            f_mid_point = fun(mid_point,weight)
-        else:
-            f_mid_point = fun(mid_point)
-        
-        with np.errstate(invalid='ignore'):
-            idx = f_mid_point <= zf
-        
+        f_mid_point = fun(mid_point,**kwargs)
+        idx = f_mid_point <= zf
         lo[idx] = mid_point[idx]
-        hi[np.invert(idx)] = mid_point[np.invert(idx)]
+        hi[~idx] = mid_point[~idx]
         delta = np.append(delta,np.max(np.abs(hi-lo)))
         con_tol = np.max(delta[num_iter])
+
         num_iter += 1
-        
         if num_iter > max_iter:
             break
         
     T = (lo+hi)/2
+    
     return T, delta
     
         
@@ -411,3 +496,22 @@ def weight_from_thresh(thr,s=1,prior='cauchy',a=0.5):
         weight = np.asarray(1+(Fx - thr*fx-0.5)/(np.sqrt(np.pi/2)*fx*thr**2))
         weight[np.isinf(weight)] = 1
     return 1/weight
+
+def thresh_from_weight(w,s=1,prior='cauchy', bayesfac=False, a=0.5, max_iter=50):
+    if bayesfac:
+        z = 1/w - 2
+        if prior == 'cauchy':
+            zz = z*np.ones_like(z)
+            thr, delta = interval_solve(z, beta_cauchy, 0, 20)
+            
+        elif prior == 'laplace':
+            zz = z*np(np.ones_like(s))
+            thr, delta = interval_solve(zz,beta_laplace,0,10,s=s,a=a)
+    else:
+        zz = np.zeros_like(w)
+        hi_thr = 20;
+        if prior == 'cauchy':
+            thr, delta = interval_solve(zz,cauchy_thresh_zero,0,hi_thr,max_iter,w=w)
+        elif prior == 'laplace':
+            thr, delta = interval_solve(zz,laplace_thresh_zero,0,s*(25+s*a),max_iter,w=w)
+    return thr, delta
