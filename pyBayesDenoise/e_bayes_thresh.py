@@ -24,7 +24,7 @@ Created on Fri Aug  6 14:21:27 2021
 # thresh_from_weight - done
 # thresh_from_data - done
 # weight_and_scale_from_data - 
-# weight_from_thresh - 
+# weight_from_thresh - done 
 # weight_from_data - 
 # weight_mono_from_data - 
 
@@ -148,8 +148,17 @@ def post_med(x,s=1,w=0.5,prior='cauchy',a=0.5):
     return mu_hat
 
 #%% Calculate Weights
-def weight_and_scale_from_data():
-    pass       
+def weight_and_scale_from_data(x, s=1, universal_thresh=True):
+    
+    if universal_thresh:
+        thr = s * np.sqrt(2 * np.log(len(x)))
+    else:
+        thr = np.inf
+        
+    t_lo = np.zeros_like(x)
+    lo = np.array([0,0.04])
+    hi = np.array([1,3])
+    
  
 def weight_from_thresh(thr,s=1,prior='cauchy',a=0.5):
     
@@ -176,23 +185,27 @@ def weight_from_thresh(thr,s=1,prior='cauchy',a=0.5):
         The numerical value or vector of values of the corresponding weight is returned.
 
     """
-    if prior == 'laplace':
-        tma = thr/s - s*a
-        weight = 1/np.abs(tma)
+    if prior == 'cauchy':
+        
+        fx = norm.pdf(thr,0,1)
+        Fx = norm.cdf(thr,0,1)
+        weight = np.asarray( 1 + (Fx - thr * fx - 0.5 ) / (np.sqrt(np.pi / 2) * fx * thr ** 2))
+        weight[np.isinf(weight)] = 1
+        
+    elif prior == 'laplace':
+        
+        tma = thr / s - s * a
+        weight = 1 / np.abs(tma)
         j = tma > -35
         
         fx = norm.pdf(tma[j],0,1)
         Fx = norm.cdf(tma[j],0,1)
-        
         weight[j] = Fx/fx
-        weight = a*s*weight - beta_laplace(thr, s, a)
         
-    elif prior == 'cauchy':
-        fx = norm.pdf(thr,0,1)
-        Fx = norm.cdf(thr,0,1)
-        weight = np.asarray(1+(Fx - thr*fx-0.5)/(np.sqrt(np.pi/2)*fx*thr**2))
-        weight[np.isinf(weight)] = 1
+        weight = a * s * weight - beta_laplace(thr, s=s, a=a)
+        
     return 1/weight
+
 def weight_from_data(x,prior='cauchy',s=1,a=0.5,universal_thresh=True,trans_type='decimated',max_iter=50):
     m = len(x)
     
