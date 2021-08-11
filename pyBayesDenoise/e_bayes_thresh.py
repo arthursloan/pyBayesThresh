@@ -8,6 +8,8 @@ Created on Fri Aug  6 14:21:27 2021
 
 #%% TODO
 
+# e_bayes_thresh - done
+# zeta_from_data - 
 
 # beta_caucy - done
 # beta_laplace - done
@@ -23,10 +25,11 @@ Created on Fri Aug  6 14:21:27 2021
 # laplace_thresh_zero - done
 # thresh_from_weight - done
 # thresh_from_data - done
-# weight_and_scale_from_data - 
+# weight_and_scale_from_data - done 
 # weight_from_thresh - done 
-# weight_from_data - 
-# weight_mono_from_data - 
+# weight_from_data - done
+# weight_mono_from_data - done
+
 
  
 
@@ -35,68 +38,61 @@ import numpy as np
 import pywt
 from scipy.stats import norm
 from scipy.special import erfcinv
+from scipy.optimize import minimize
+from sklearn.isotonic import IsotonicRegression
 
 
 
-# def e_bayes_thresh(x,prior='cauchy',
-#                    a=0.5,
-#                    bayesfac=False,
-#                    sdev=None,
-#                    vebose=False,
-#                    thresh_rule='median',
-#                    universal_thresh=True,
-                   
-#                    vscale,trans_type,max_iter=50,min_std=1e-9):
+def e_bayes_thresh(x,
+                   prior='cauchy',
+                   a=0.5,
+                   bayesfac=False,
+                   sdev=None,
+                   vebose=False,
+                   thresh_rule='median',
+                   universal_thresh=True,
+                   trans_type='decimated',
+                   max_iter=50,
+                   min_std=1e-9):
     
-#     if prior = 'cauchy':
-#         pass
-#     elif prior = 'laplace':
-#         pass
-    
-    
-#     norm_fac = 1/(-np.sqrt(2)*erfcinv(2*0.75))
-#     if vscale == 'level_dependent':
-#         std_est = norm_fac*np.median(np.abs(x-np.median(x)))*np.ones_like(x)
-#     else:  
-#         std_est = vscale*np.ones_like(x)
-    
-#     std_est[std_est<min_std] = min_std
-    
-    
-#     std_coeff = x/std_est
-#     weight = weight_from_data(std_coeff,30,trans_type)
-#     if thresh_rule == 'median':   
-#         mu_hat, delta = post_med_cauchy(std_coeff,weight,max_iter)
-#     elif thresh_rule == 'mean':
-#         mu_hat = post_mean_cauchy(std_coeff,weight)
-#     elif  np.isin(thresh_rule,['soft','hard']):
-#         thr = thresh_from_weight(weight, max_iter)
-#         mu_hat = pywt.threshold(std_coeff,thr,mode=thresh_rule)
+    if sdev is None:
+        norm_fac = 1/(-np.sqrt(2)*erfcinv(2*0.75))
+        std_est = norm_fac*np.median(np.abs(x-np.median(x)))*np.ones_like(x)
+        stabadjustment = True
         
-#     return mu_hat*std_est
-
-# def e_bayes_thresh(level_coeff,vscale,thresh_rule,trans_type,max_iter=50,min_std=1e-9):
+    elif len(sdev) == 1:
+        std_est = sdev*np.ones_like(x)
+        stabadjustment = True
+    else:
+        std_est = sdev
+            
+    std_est[std_est<min_std] = min_std
+    if stabadjustment:
+        std_est = np.mean(std_est)
+        x /= std_est
+        s = sdev/std_est
+    else:
+        s = sdev
     
-    
-#     norm_fac = 1/(-np.sqrt(2)*erfcinv(2*0.75))
-#     if vscale == 'level_dependent':
-#         std_est = norm_fac*np.median(np.abs(level_coeff-np.median(level_coeff)))*np.ones_like(level_coeff)
-#     else:  
-#         std_est = vscale*np.ones_like(level_coeff)
-    
-#     std_est[std_est<min_std] = min_std
-#     std_coeff = level_coeff/std_est
-    
-#     weight = weight_from_data(std_coeff,30,trans_type)
-#     if thresh_rule == 'median':   
-#         mu_hat, delta = post_med_cauchy(std_coeff,weight,max_iter)
-#     elif thresh_rule == 'mean':
-#         mu_hat = post_mean_cauchy(std_coeff,weight)
-#     elif  np.isin(thresh_rule,['soft','hard']):
-#         thr = thresh_from_weight(weight, max_iter)
-#         mu_hat = pywt.threshold(std_coeff,thr,mode=thresh_rule)
+    if prior == 'laplace' and np.isnan(a):
+        w, a = weight_and_scale_from_data(x,s,universal_thresh)
+    else:
+        w = weight_from_data(x,s,prior,a,universal_thresh)
         
-#     return mu_hat*std_est
+    if thresh_rule == 'median':
+        mu_hat = post_med(x,s=s,w=w,prior=prior,a=a)
+    elif thresh_rule == 'mean':
+        mu_hat, delta = post_mean(x,s=s,w=w,prior=prior,a=a)
+    elif np.isin(thresh_rule,['soft','hard']):
+        thr = thresh_from_weight(w, s=s, prior=prior, bayesfac=bayesfac, a=a, max_iter=max_iter)
+        mu_hat = pywt.threshold(x,thr,mode=thresh_rule)
+    else:
+        mu_hat = np.nan
+            
+    if stabadjustment:
+        return mu_hat*std_est
+    else:
+        return mu_hat
 
 
 def post_mean(x,s=1,w=0.5,prior='cauchy',a=0.5):
@@ -151,14 +147,25 @@ def post_med(x,s=1,w=0.5,prior='cauchy',a=0.5):
 def weight_and_scale_from_data(x, s=1, universal_thresh=True):
     
     if universal_thresh:
-        thr = s * np.sqrt(2 * np.log(len(x)))
+        thi = s * np.sqrt(2 * np.log(len(x)))
     else:
-        thr = np.inf
+        thi = np.inf
         
-    t_lo = np.zeros_like(x)
+    tlo = np.zeros_like(x)
     lo = np.array([0,0.04])
     hi = np.array([1,3])
+    start_par = np.array([0.5,0.5])
     
+    uu  = minimize(laplace_neg_log_likelyhood,start_par, args=(x,s,thi,tlo),method='L-BFGS-B',bounds=((lo[0],hi[0]),(lo[1],hi[1])))
+    uu = uu.x
+    
+    a = uu[1]
+    wlo = weight_from_thresh(thi, s=s, a=a)
+    whi = weight_from_thresh(tlo, s=s, a=a)
+    wlo = np.max(wlo)
+    whi = np.max(whi)
+    w = uu[0] * (whi - wlo) + wlo
+    return w, a
  
 def weight_from_thresh(thr,s=1,prior='cauchy',a=0.5):
     
@@ -206,18 +213,26 @@ def weight_from_thresh(thr,s=1,prior='cauchy',a=0.5):
         
     return 1/weight
 
-def weight_from_data(x,prior='cauchy',s=1,a=0.5,universal_thresh=True,trans_type='decimated',max_iter=50):
+def weight_from_data(x, s=1, prior='cauchy', a=0.5, universal_thresh=True, 
+                     trans_type='decimated', max_iter=50):
     m = len(x)
     
     if universal_thresh:
+        
         if trans_type == 'decimated':
             thr = s*np.sqrt(2*np.log(m))
+            
         if trans_type == 'nondecimated':
             thr = s*np.sqrt(2*np.log(m*np.log2(m)))
+            
         wlo = np.asarray(weight_from_thresh(thr,s=s,prior=prior,a=a),dtype=np.float64)
         wlo = np.max(wlo)
+        
+    else:
+        wlo = 0
             
-    tmp_weight = np.asarray(np.nan)        
+    tmp_weight = np.asarray(np.nan)  
+      
     if prior == 'cauchy':
         beta = beta_cauchy(x)
     elif prior == 'laplace':
@@ -225,8 +240,10 @@ def weight_from_data(x,prior='cauchy',s=1,a=0.5,universal_thresh=True,trans_type
     
     beta = np.minimum(beta,float(1e20))
     whi = np.array([1.0])
-    delta_weight = whi-wlo
-    shi = np.sum(beta/(1+beta))
+    
+    delta_weight = whi - wlo
+    
+    shi = np.sum(beta / (1 + beta))
     shi_pos = shi >= 0
     
     if np.any(shi_pos):
@@ -236,7 +253,7 @@ def weight_from_data(x,prior='cauchy',s=1,a=0.5,universal_thresh=True,trans_type
             return weight
         
     slo = np.sum(beta / (1 + wlo * beta))
-    slo_neg = slo<=0
+    slo_neg = slo <= 0
     
     if np.any(slo_neg):
         tmp_weight[slo_neg] = wlo[slo_neg]
@@ -247,7 +264,7 @@ def weight_from_data(x,prior='cauchy',s=1,a=0.5,universal_thresh=True,trans_type
     s_tol = 1e-7
     ii = 0
     
-    while con_tol >= w_tol:
+    while con_tol > w_tol:
         wmid = np.sqrt(whi*wlo)
         smid = np.sum(beta / (1 + wmid * beta))
         smid_zero = np.abs(smid) < s_tol
@@ -281,7 +298,40 @@ def weight_from_data(x,prior='cauchy',s=1,a=0.5,universal_thresh=True,trans_type
     weight = tmp_weight
     return weight
     
-
+def weight_mono_from_data(x, prior='cauchy',a=0.5,tol=01e-8,max_iter=50):
+    
+    wmin = weight_from_thresh(np.sqrt(2 * np.log(len(x))), prior=prior,a=a)
+    winit = 1
+    
+    if prior == 'cauchy':
+        beta = beta_cauchy(x)
+    elif prior == 'laplace':
+        beta = beta_laplace(x,a=a)
+        
+    w = winit*np.ones_like(beta)
+    
+    ii = 0
+    
+    while ii <= max_iter:
+        aa = w + 1 / beta
+        ps = w + aa
+        ww = 1 / aa ** 2
+        iso_reg = IsotonicRegression(increasing=False).fit(ps,ww)
+        wnew = iso_reg.predict(ps)
+        wnew = np.maximum(wmin,wnew)
+        wnew = np.minimum(1,wnew)
+        zinc = np.max(np.abs(np.ptp(wnew - w)))
+        w = wnew
+        if zinc < tol:
+            return w
+        ii += 1
+    return w
+        
+    
+    
+        
+    
+    
 #%% Calculate Thresholds
 def thresh_from_weight(w, s=1, prior='cauchy', bayesfac=False, a=0.5, max_iter=50):
     if bayesfac:
@@ -631,4 +681,16 @@ def interval_solve(zf,fun,lo,hi,max_iter=50,**kwargs):
     T = (lo+hi)/2
     
     return T, delta
+
+def laplace_neg_log_likelyhood(xpar, xx, ss, tlo, thi):
+    a = xpar[1]
+    
+    wlo = weight_from_thresh(thi, ss, a=a)
+    whi = weight_from_thresh(tlo,ss, a=a)
+    wlo = np.max(wlo)
+    whi = np.min(whi)
+    loglik = np.sum(np.log(1 + (xpar[0] * (whi - wlo) + wlo) * beta_laplace(xx,s=ss,a=a)))
+    
+    return -loglik
+    
     
