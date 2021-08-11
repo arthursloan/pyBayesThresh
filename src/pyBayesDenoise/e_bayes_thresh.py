@@ -9,7 +9,6 @@ Created on Fri Aug  6 14:21:27 2021
 #%% TODO
 
 # e_bayes_thresh - done
-# zeta_from_data - 
 
 # beta_caucy - done
 # beta_laplace - done
@@ -404,6 +403,7 @@ def beta_cauchy(x):
         A vector the same length as x, containing the value(s) β(x)
 
     '''
+    x = x.astype(np.float64)
     phix = norm.pdf(x)
     j = x != 0
     beta = x
@@ -543,7 +543,7 @@ def beta_laplace(x, s=1, a=0.5):
     xpa = x/s +s*a
     xma = x/s -s*a
     rat1 = 1/xpa
-    rat1[xpa > 35] = norm.cdf(-xpa[xpa <35],0,1)/norm.pdf(xpa[xpa < 35],0,1)
+    rat1[xpa < 35] = norm.cdf(-xpa[xpa < 35],0,1)/norm.pdf(xpa[xpa < 35],0,1)
     rat2 = 1/np.abs(xma)
     xma[xma > 35] = 35
     rat2[xma > -35] = norm.cdf(xma[xma > -35],0,1)/norm.pdf(xma[xma > -35],0,1)
