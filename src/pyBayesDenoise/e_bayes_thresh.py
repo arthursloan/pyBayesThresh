@@ -138,7 +138,7 @@ def post_med(x,s=1,w=0.5,prior='cauchy',a=0.5):
     if prior == 'cauchy':
         mu_hat = post_med_cauchy(x,w)
     elif prior == 'laplace':
-        mu_hat = post_med_laplace(x,s,w,a=a)
+        mu_hat = post_med_laplace(x,s,w,a)
         
     return mu_hat
 
@@ -192,16 +192,15 @@ def weight_from_thresh(thr,s=1,prior='cauchy',a=0.5):
 
     """
     if prior == 'cauchy':
-        
+        thr = np.asarray(thr)
         fx = norm.pdf(thr,0,1)
         Fx = norm.cdf(thr,0,1)
         weight = np.asarray( 1 + (Fx - thr * fx - 0.5 ) / (np.sqrt(np.pi / 2) * fx * thr ** 2))
         weight[np.isinf(weight)] = 1
         
     elif prior == 'laplace':
-        
         tma = thr / s - s * a
-        weight = 1 / np.abs(tma)
+        weight = np.asarray(1 / np.abs(tma))
         j = tma > -35
         
         fx = norm.pdf(tma[j],0,1)
@@ -223,7 +222,7 @@ def weight_from_data(x, s=1, prior='cauchy', a=0.5, universal_thresh=True,
             
         if trans_type == 'nondecimated':
             thr = s*np.sqrt(2*np.log(m*np.log2(m)))
-            
+        
         wlo = np.asarray(weight_from_thresh(thr,s=s,prior=prior,a=a),dtype=np.float64)
         wlo = np.max(wlo)
         
@@ -263,6 +262,8 @@ def weight_from_data(x, s=1, prior='cauchy', a=0.5, universal_thresh=True,
     s_tol = 1e-7
     ii = 0
     
+    wlo = np.asarray(wlo)
+    whi = np.asarray(whi)
     while con_tol > w_tol:
         wmid = np.sqrt(whi*wlo)
         smid = np.sum(beta / (1 + wmid * beta))
@@ -345,7 +346,8 @@ def thresh_from_weight(w, s=1, prior='cauchy', bayesfac=False, a=0.5, max_iter=5
             thr, delta = interval_solve(zz, beta_laplace, 0, 10, s=s, a=a)
             
     else:
-        zz = np.zeros_like(w)
+        
+        zz = np.zeros(np.max([np.size(w),np.size(s)]))
         hi_thr = 20;
         
         if prior == 'cauchy':
@@ -371,11 +373,12 @@ def thresh_from_weight(w, s=1, prior='cauchy', bayesfac=False, a=0.5, max_iter=5
 def thresh_from_data(x, s=1, prior='cauchy', bayesfac=False, a=0.5, universal_thresh=True):
     if prior == 'cauchy':
         s = 1
-    elif prior == 'laplace':
+        
+    if prior == 'laplace' and np.isnan(a):
         w, a = weight_and_scale_from_data(x,s=s,universal_thresh=universal_thresh)
     else:
         w = weight_from_data(x,s=s,prior=prior,a=a)
-    
+        
     thr, delta = thresh_from_weight(w, s=s, prior=prior, bayesfac=bayesfac, a=a)
     
     return thr
@@ -417,8 +420,9 @@ def beta_cauchy(x):
 def post_mean_cauchy(x, w):
     
     exp_x = np.exp(-x ** 2 / 2)
-    z = w * (x - (2 * (1 - exp_x)) / x)
-    z = z / (w * (1 - exp_x) + (1 - w) * exp_x * x ** 2)
+    with np.errstate(divide='ignore', invalid='ignore'):
+        z = w * (x - (2 * (1 - exp_x)) / x)
+        z = z / (w * (1 - exp_x) + (1 - w) * exp_x * x ** 2)
     mu_hat = z
     mu_hat[x==0] = 0
     huge_mu_inds = (np.abs(mu_hat) > np.abs(x))
@@ -540,11 +544,12 @@ def beta_laplace(x, s=1, a=0.5):
 
     """
     x = np.abs(x)
-    xpa = x/s +s*a
-    xma = x/s -s*a
-    rat1 = 1/xpa
+    xpa = np.asarray(x/s + s * a)
+    xma = np.asarray(x/s - s * a)
+    rat1 = np.asarray(1/xpa)
     rat1[xpa < 35] = norm.cdf(-xpa[xpa < 35],0,1)/norm.pdf(xpa[xpa < 35],0,1)
-    rat2 = 1/np.abs(xma)
+    
+    rat2 = np.asarray(1/np.abs(xma))
     xma[xma > 35] = 35
     rat2[xma > -35] = norm.cdf(xma[xma > -35],0,1)/norm.pdf(xma[xma > -35],0,1)
     beta = (a * s) / 2 * (rat1 + rat2) - 1
@@ -553,31 +558,33 @@ def beta_laplace(x, s=1, a=0.5):
 
 def post_mean_laplace(x,s=1,w=0.5,a=0.5):
     a = np.min([a,20])
+    sx = np.sign(x)
     
     wpost = wpost_laplace(w, x, s, a)
     
     x = np.abs(x)
-    xpa = x / s + s*a
-    xma = x / s - s*a
-    xpa[xpa >35] = 35
+    xpa = x / s + s * a
+    xma = x / s - s * a
+    xpa[xpa > 35] = 35
     xma[xma < -35] = -35
     cp1 = norm.cdf(xma,0,1)
     cp2 = norm.cdf(-xpa,0,1)
     ef = np.exp(np.minimum(2 * a * x, 100))
-    post_mean_cond = x - a * s ** 2 * (2 * cp1 / (cp1 + ef + cp2) - 1)
-    mu_hat = np.sign(x) * wpost * post_mean_cond
+    post_mean_cond = x - a * s**2 * (2 * cp1 / (cp1 + ef * cp2) - 1)
+    mu_hat = sx * wpost * post_mean_cond
     
     return mu_hat
 
 def post_med_laplace(x, s=1, w=0.5, a=0.5):
     a = np.min([a,20])
     
+    sx = np.sign(x)
     x = np.abs(x)
     xma = x / s - s * a
-    zz = 1 / a * (1 / s * norm.pdf(xma)) * (1 / w + beta_laplace(x, s, a))
+    zz = 1 / a * (1 / s * norm.pdf(xma,0,1)) * (1 / w + beta_laplace(x, s, a))
     zz[xma > 25] = 0.5
-    mu_cor = norm.cdf(np.minimum(zz,1),0,1)
-    mu_hat = np.sign(x) * np.maximum(0, xma - mu_cor,0,1) * s
+    mu_cor = norm.ppf(np.minimum(zz,1),0,1)
+    mu_hat = sx * np.maximum(0, xma - mu_cor) * s
     
     return mu_hat 
     
@@ -608,8 +615,10 @@ def laplace_thresh_zero(x,s=1,w=0.5,a=0.5):
         DESCRIPTION.
 
     """
-    a = np.min(a,20)
+    a = np.min([a,20])
+    
     xma = x / s - s * a
+    
     z = norm.cdf(xma,0,1) - 1 / a * (1 / s * norm.pdf(xma,0,1)) * (1 / w + beta_laplace(x,s,a))
     
     return z
