@@ -5,33 +5,6 @@ Created on Fri Aug  6 14:21:27 2021
 
 @author: artsloan
 """
-
-#%% TODO
-
-# e_bayes_thresh - done
-
-# beta_caucy - done
-# beta_laplace - done
-# post_mean - done
-#   post_mean_cauchy - done
-#   post_mean_laplace - done
-#       wpost_laplace - done
-# cauchy_med_zero - done
-# cauchy_thresh_zero - done
-# post_med - done
-#   post_med_cauchy - done 
-#   post_med_laplace - done
-# laplace_thresh_zero - done
-# thresh_from_weight - done
-# thresh_from_data - done
-# weight_and_scale_from_data - done 
-# weight_from_thresh - done 
-# weight_from_data - done
-# weight_mono_from_data - done
-
-
- 
-
 #%% Import Statements
 import numpy as np
 import pywt
@@ -40,7 +13,43 @@ from scipy.special import erfcinv
 from scipy.optimize import minimize
 from sklearn.isotonic import IsotonicRegression
 
-
+def e_bayes_denoise(data, level, wav_name='sym4',noise_est='level_independent',thresh_rule='median'):
+    
+    # A python Implementation of the Empirical Bayes Thresholding packages from http://CRAN.R-project.org/package=EbayesThresh.
+    
+    # Decomposes the 1d signal in data into its constituent wavelets, to a specified number of levels with checks to ensure that the maximum useful level is not exceded 
+    w = pywt.Wavelet(wav_name)
+    max_lev = pywt.dwt_max_level(len(data),w.dec_len)
+    
+    if level > max_lev:
+        level = max_lev
+    coeffs = pywt.wavedec(data,wav_name,level=level)
+    
+    # Order of level coefficients from pywt is [cA_n, cD_n cD_n-1 ... cD_1]
+    d1 = coeffs[-1]
+    
+    if noise_est.lower() == 'level_independent':
+        norm_fac = 1/(-np.sqrt(2)*erfcinv(2*0.75))
+        vscale = norm_fac*np.median(np.abs(d1))
+    elif noise_est.lower() == 'level_dependent':
+        vscale = noise_est
+        
+        
+    # Returns thresholded levels
+    wthr = coeffs[1:]
+    for i , lev in enumerate(wthr):
+         wthr[i] = e_bayes_thresh(lev, sdev=vscale, thresh_rule=thresh_rule, trans_type='decimated')
+    
+    # Reconstructs the signal from the thresholded levels
+    wthr.insert(0,coeffs[0])
+    new_data = pywt.waverec(wthr,wav_name)
+    
+    if data.size%2 == 1:
+        new_data = new_data[:-1]
+    sse = np.sum((data-new_data)**2)
+    
+    extra = {'old_coeffs':coeffs,'new_coeffs':wthr,'SSE':sse}
+    return new_data, extra
 
 def e_bayes_thresh(x,
                    prior='cauchy',
@@ -59,7 +68,7 @@ def e_bayes_thresh(x,
         std_est = norm_fac*np.median(np.abs(x-np.median(x)))*np.ones_like(x)
         stabadjustment = True
         
-    elif len(sdev) == 1:
+    elif np.asarray(sdev).size == 1:
         std_est = sdev*np.ones_like(x)
         stabadjustment = True
     else:
@@ -67,8 +76,9 @@ def e_bayes_thresh(x,
             
     std_est[std_est<min_std] = min_std
     if stabadjustment:
+        sdev = std_est
         std_est = np.mean(std_est)
-        x /= std_est
+        x = x/std_est
         s = sdev/std_est
     else:
         s = sdev
@@ -76,7 +86,7 @@ def e_bayes_thresh(x,
     if prior == 'laplace' and np.isnan(a):
         w, a = weight_and_scale_from_data(x,s,universal_thresh)
     else:
-        w = weight_from_data(x,s,prior,a,universal_thresh)
+        w = weight_from_data(x,s,prior,a,universal_thresh,trans_type)
         
     if thresh_rule == 'median':
         mu_hat = post_med(x,s=s,w=w,prior=prior,a=a)
@@ -136,7 +146,7 @@ def post_mean(x,s=1,w=0.5,prior='cauchy',a=0.5):
 def post_med(x,s=1,w=0.5,prior='cauchy',a=0.5):
     
     if prior == 'cauchy':
-        mu_hat = post_med_cauchy(x,w)
+        mu_hat, delta = post_med_cauchy(x,w)
     elif prior == 'laplace':
         mu_hat = post_med_laplace(x,s,w,a)
         
@@ -146,21 +156,21 @@ def post_med(x,s=1,w=0.5,prior='cauchy',a=0.5):
 def weight_and_scale_from_data(x, s=1, universal_thresh=True):
     
     if universal_thresh:
-        thi = s * np.sqrt(2 * np.log(len(x)))
+        thi = np.array(s * np.sqrt(2 * np.log(len(x))))
     else:
         thi = np.inf
         
-    tlo = np.zeros_like(x)
+    tlo = np.zeros_like(s)
     lo = np.array([0,0.04])
     hi = np.array([1,3])
     start_par = np.array([0.5,0.5])
     
-    uu  = minimize(laplace_neg_log_likelyhood,start_par, args=(x,s,thi,tlo),method='L-BFGS-B',bounds=((lo[0],hi[0]),(lo[1],hi[1])))
+    uu  = minimize(laplace_neg_log_likelyhood,start_par, args=(x,s,tlo,thi),method='L-BFGS-B',bounds=((lo[0],hi[0]),(lo[1],hi[1])))
     uu = uu.x
     
     a = uu[1]
-    wlo = weight_from_thresh(thi, s=s, a=a)
-    whi = weight_from_thresh(tlo, s=s, a=a)
+    wlo = weight_from_thresh(thi, s=s, prior='laplace', a=a)
+    whi = weight_from_thresh(tlo, s=s, prior='laplace', a=a)
     wlo = np.max(wlo)
     whi = np.max(whi)
     w = uu[0] * (whi - wlo) + wlo
@@ -237,7 +247,7 @@ def weight_from_data(x, s=1, prior='cauchy', a=0.5, universal_thresh=True,
         beta = beta_laplace(x,s=s,a=a)
     
     beta = np.minimum(beta,float(1e20))
-    whi = np.array([1.0])
+    whi = np.asarray(1.0)
     
     delta_weight = whi - wlo
     
@@ -691,11 +701,15 @@ def interval_solve(zf,fun,lo,hi,max_iter=50,**kwargs):
     
     return T, delta
 
-def laplace_neg_log_likelyhood(xpar, xx, ss, tlo, thi):
+def laplace_neg_log_likelyhood(xpar, *args):
     a = xpar[1]
+    xx = args[0]
+    ss = args[1]
+    tlo = args[2]
+    thi = args[3]
     
-    wlo = weight_from_thresh(thi, ss, a=a)
-    whi = weight_from_thresh(tlo,ss, a=a)
+    wlo = weight_from_thresh(thi, ss, prior='laplace', a=a)
+    whi = weight_from_thresh(tlo, ss, prior='laplace', a=a)
     wlo = np.max(wlo)
     whi = np.min(whi)
     loglik = np.sum(np.log(1 + (xpar[0] * (whi - wlo) + wlo) * beta_laplace(xx,s=ss,a=a)))
