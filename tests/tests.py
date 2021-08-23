@@ -288,7 +288,7 @@ y_valid = np.array([-0.505961254143474, -0.542183936326586, -0.567301287058434,
                     0.970949192583676, 0.805846623299200, 0.617997812760855,
                     0.428723345376913, 0.202099815112344, -0.0118281211109277,
                     -0.0778055155008839])
-assert ebt.e_bayes_denoise(y, 3,wav_name='sym4',noise_est='level_independent',thresh_rule='median')[0] == approx(y_valid,abs=1e-5)
+assert ebt.wavelet_denoise(y, 3,wav_name='sym4',noise_est='level_independent',thresh_rule='median')[0] == approx(y_valid,abs=1e-5)
 
 
 
