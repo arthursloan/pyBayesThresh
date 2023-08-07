@@ -2,7 +2,7 @@
 name = "pyBayesThresh"
 version = "0.1.0"
 description = "A Python 3 implementation of the EbayesThresh R Library"
-readme = {file = "README.md"}
+readme = "README.md"
 requires-python = ">=3.7"
 license = {file = "LICENSE.txt"}
 
@@ -47,7 +47,7 @@ classifiers = [  # Optional
 dependencies = [ # Optional
   "numpy",
   "scipy",
-  "sklearn",
+  "scikit-learn",
   "PyWavelets",
 ]
 

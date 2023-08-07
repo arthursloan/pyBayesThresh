@@ -8,7 +8,7 @@ Created on Thu Aug 26 15:20:08 2021
 
 import numpy as np
 import matplotlib.pyplot as plt
-import e_bayes_thresh as ebt
+import pyBayesThresh as pbt
 from scipy.signal import savgol_filter
 #%% Functions
 def gaussian(x,height,center,width):
@@ -61,8 +61,8 @@ for i in range(0,40):
     snr = 1/noise_std
     
     z = y + yn
-    z_denoised,ey = ebt.wavelet_denoise(z, level, wav_name=wavelet_type)
-    yn_denoised,en = ebt.wavelet_denoise(yn,level,wav_name=wavelet_type)
+    z_denoised,ey = pbt.wavelet_denoise(z, level, wav_name=wavelet_type)
+    yn_denoised,en = pbt.wavelet_denoise(yn,level,wav_name=wavelet_type)
     snr_denoised = 1/np.std(yn_denoised)
     
     resid.append(np.std(y[plot_range]-z_denoised[plot_range]))
