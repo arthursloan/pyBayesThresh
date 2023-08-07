@@ -8,7 +8,7 @@ Created on Wed Aug 11 16:03:51 2021
 
 import numpy as np
 from pytest import approx
-import e_bayes_thresh as ebt
+import pyBayesThresh as pbt
 import matplotlib.pyplot as plt
 
 
@@ -20,9 +20,9 @@ y_valid = np.array([+0.889852029651143,
                     -0.561817771773154,
                     +285.459466672351,
                     +15639.8849145429])
-y = ebt.beta_laplace(x)
+y = pbt.beta_laplace(x)
 
-assert ebt.beta_laplace(x) == approx(y_valid,)
+assert pbt.beta_laplace(x) == approx(y_valid,)
 
 #%% Test beta_cauchy.py
 x = np.array([-2,1,0,-4,5])
@@ -32,7 +32,7 @@ y_valid = np.array([+0.597264024732662,
                     +185.247374190108,
                     +10732.4514608350])
 
-assert ebt.beta_cauchy(x) == approx(y_valid,)
+assert pbt.beta_cauchy(x) == approx(y_valid,)
 
 #%% Test post_mean with the laplace prior
 x = np.array([-2,1,0,-4,5])
@@ -42,7 +42,7 @@ y_valid = np.array([-1.01158962199946,
                     -3.48800924041643,
                     +4.4997151290092])
 
-assert ebt.post_mean(x,prior='laplace') == approx(y_valid,)
+assert pbt.post_mean(x,prior='laplace') == approx(y_valid,)
 
 #%% Test post_mean with the cauchy prior
 x = np.array([-2,1,0,-4,5])
@@ -52,7 +52,7 @@ y_valid = np.array([-0.807489729485063,
                     -3.48264328130604,
                     +4.59959010481196])
 
-assert ebt.post_mean(x,prior='cauchy') == approx(y_valid,)
+assert pbt.post_mean(x,prior='cauchy') == approx(y_valid,)
 #%% Test post_med with the laplace prior
 x = np.array([-2,1,0,-4,5])
 y_valid = np.array([-0.829992882781227,
@@ -61,7 +61,7 @@ y_valid = np.array([-0.829992882781227,
                     -3.49568406354978,
                     +4.49992059554046])
 
-assert ebt.post_med(x,prior='laplace') == approx(y_valid,)
+assert pbt.post_med(x,prior='laplace') == approx(y_valid,)
 #%% Test post_med with the cauchy prior
 x = np.array([-2,1,0,-4,5])
 y_valid = np.array([-0.398555518768262,
@@ -70,7 +70,7 @@ y_valid = np.array([-0.398555518768262,
                     -3.50192235462600,
                     +4.60455881926464])
 
-assert ebt.post_med(x,prior='cauchy') == approx(y_valid,)
+assert pbt.post_med(x,prior='cauchy') == approx(y_valid,)
 
 #%% Test thresh_from_weight with the laplace prior
 w = np.arange(0.2,0.8,0.2)
@@ -79,7 +79,7 @@ y_valid = np.array([+2.44873377028853,
                     +1.40956187155098,
                     +0.767900790087879])
 
-assert ebt.thresh_from_weight(w,prior='laplace')[0] == approx(y_valid)
+assert pbt.thresh_from_weight(w,prior='laplace')[0] == approx(y_valid)
 
 #%% Test thresh_from_weight with the cauchy prior
 w = np.arange(0.2,0.8,0.2)
@@ -88,7 +88,7 @@ y_valid = np.array([+2.60031945683295,
                     +1.51366172562120,
                     +0.818831556534860])
 
-assert ebt.thresh_from_weight(w,prior='cauchy')[0] == approx(y_valid)
+assert pbt.thresh_from_weight(w,prior='cauchy')[0] == approx(y_valid)
 
 #%% Test thresh_from_data with the laplace prior
 x = np.array([-0.560475647, -0.230177489, 1.558708314, 0.070508391, 0.129287735, 1.715064987, 
@@ -110,7 +110,7 @@ x = np.array([-0.560475647, -0.230177489, 1.558708314, 0.070508391, 0.129287735,
               2.187332993, 1.532610626, -0.235700359, -1.026420900])
 y_valid = +3.03485425654799
 
-assert ebt.thresh_from_data(x,prior='laplace')[0] == approx(y_valid)
+assert pbt.thresh_from_data(x,prior='laplace')[0] == approx(y_valid)
 
 #%% Test weight_from_thresh with the laplace prior
 x = np.arange(1,6)
@@ -120,7 +120,7 @@ y_valid = np.array([+0.734187187788918,
                     +0.00348003803260551,
                     +6.39312743790131e-05])
 
-assert ebt.weight_from_thresh(x,prior='laplace') == approx(y_valid)
+assert pbt.weight_from_thresh(x,prior='laplace') == approx(y_valid)
 
 #%% Test weight_from_thresh with the cauchy prior
 x = np.arange(1,6)
@@ -130,7 +130,7 @@ y_valid = np.array([0.753193469037590,
                     0.00534477537944352,
                     9.31590884344020e-05])
 
-assert ebt.weight_from_thresh(x,prior='cauchy') == approx(y_valid)
+assert pbt.weight_from_thresh(x,prior='cauchy') == approx(y_valid)
 
 #%% Test weight_from_data with the laplace prior
 x = np.array([-0.560475647, -0.230177489, 1.558708314, 0.070508391, 0.129287735, 1.715064987, 
@@ -152,7 +152,7 @@ x = np.array([-0.560475647, -0.230177489, 1.558708314, 0.070508391, 0.129287735,
               2.187332993, 1.532610626, -0.235700359, -1.026420900])
 y_valid = +0.0609124723599925
 
-assert ebt.weight_from_data(x,prior='laplace') == approx(y_valid)
+assert pbt.weight_from_data(x,prior='laplace') == approx(y_valid)
 
 #%% Test weight_from_data with the cauchy prior
 x = np.array([-0.560475647, -0.230177489, 1.558708314, 0.070508391, 0.129287735, 1.715064987, 
@@ -174,12 +174,12 @@ x = np.array([-0.560475647, -0.230177489, 1.558708314, 0.070508391, 0.129287735,
               2.187332993, 1.532610626, -0.235700359, -1.026420900])
 y_valid = +0.0864429263465871
 
-assert ebt.weight_from_data(x,prior='cauchy') == approx(y_valid)
+assert pbt.weight_from_data(x,prior='cauchy') == approx(y_valid)
 
 #%% Test weight_and_scale_from_data
 y_valid = (0.371583145802847,3.0)
 
-assert ebt.weight_and_scale_from_data(x) == approx(y_valid)
+assert pbt.weight_and_scale_from_data(x) == approx(y_valid)
 
 #%% Test e_bayes_thresh with a laplace prior
 x = np.array([0.253318514, -0.028546755, -0.042870457, 1.368602284, 
@@ -220,7 +220,7 @@ y_valid = np.array([0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
           -3.59828116583749,2.11687940619439,0,-2.04737147690392,
           -1.08310726061405,0,3.13925967166472,0])
 
-assert ebt.e_bayes_thresh(x,prior='laplace',sdev=1) == approx(y_valid)
+assert pbt.e_bayes_thresh(x,prior='laplace',sdev=1) == approx(y_valid)
 
 #%% Test e_bayes_thresh with a cauchy prior
 
@@ -233,7 +233,7 @@ y_valid = np.array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
                     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, -3.18803377526410, 0, 0,
                     0, 0, 0, 2.29446725610846, 0])
 
-assert ebt.e_bayes_thresh(x,prior='cauchy') == approx(y_valid)
+assert pbt.e_bayes_thresh(x,prior='cauchy') == approx(y_valid)
 
 #%% Test the denoising functionality
 
@@ -288,7 +288,7 @@ y_valid = np.array([-0.505961254143474, -0.542183936326586, -0.567301287058434,
                     0.970949192583676, 0.805846623299200, 0.617997812760855,
                     0.428723345376913, 0.202099815112344, -0.0118281211109277,
                     -0.0778055155008839])
-assert ebt.wavelet_denoise(y, 3,wav_name='sym4',noise_est='level_independent',thresh_rule='median')[0] == approx(y_valid,abs=1e-5)
+assert pbt.wavelet_denoise(y, 3,wav_name='sym4',noise_est='level_independent',thresh_rule='median')[0] == approx(y_valid,abs=1e-5)
 
 
 
